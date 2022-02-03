@@ -1,0 +1,22 @@
+#include "ferry2.pfile-L3-C1-06.pddl.1.cnf.apx".
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Encoding for stable extensions
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Guess a set S \subseteq A
+in(X) :- not out(X), arg(X).
+out(X) :- not in(X), arg(X).
+
+%% S has to be conflict-free
+:- in(X), in(Y), att(X,Y).
+
+%% The argument x is defeated by the set S
+defeated(X) :- in(Y), att(Y,X).
+
+%% S defeats all arguments which do not belong to S
+:- out(X), not defeated(X).
+
+#show in/1.
+%#show out/1

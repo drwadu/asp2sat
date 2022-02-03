@@ -161,14 +161,21 @@ class Program(object):
     def _computeComponents(self):
         self.dep = nx.DiGraph()
         for r in self._program:
-            # print(self.dep)
-            # print(r)
             for a in r.head:
-                # print(a)
                 for b in r.body:
-                    # print(a)
                     if b > 0:
                         self.dep.add_edge(b, a)
+        comp = nx.algorithms.strongly_connected_components(self.dep)
+        self._components = list(comp)
+        self._condensation = nx.algorithms.condensation(
+            self.dep, self._components)
+
+    def _computeComponents_hack(self):
+        self.dep = nx.DiGraph()
+        for r in self._program:
+            for a in r.head:
+                for b in r.body:  # all body atoms of form: not not atom
+                    self.dep.add_edge(b, a)
         comp = nx.algorithms.strongly_connected_components(self.dep)
         self._components = list(comp)
         self._condensation = nx.algorithms.condensation(
@@ -610,112 +617,19 @@ if __name__ == "__main__":
     program = Program(control)
     program._computeComponents()
     dp = program.dep
+    # print(dp)
 
     cycles = list(nx.simple_cycles(program.dep))
-    print(f'dpcs {len(cycles)}')
-    for x in control.symbolic_atoms:
-        print(f'c {x.symbol} {x.literal}')
-    for c in cycles:
-        for a in c:
-            print(a, end=' ')
-        print()
-
-# if __name__ == "__main__":
-#    control = clingoext.Control()
-#    mode = sys.argv[1]
-#    weights = {}
-#    no_sub = False
-#    no_pp = False
-#    if len(sys.argv) > 2 and sys.argv[2] == "-no_subset_check":
-#        logger.info("   Not performing subset check when adding edges to hypergraph.")
-#        no_sub = True
-#        del sys.argv[2]
-#    elif len(sys.argv) > 2 and sys.argv[2] == "-no_pp":
-#        logger.info("   No Preprocessin")
-#        no_pp = True
-#        del sys.argv[2]
-#    if mode == "asp":
-#        program_files = sys.argv[2:]
-#        program_str = None
-#        if not program_files:
-#            program_str = sys.stdin.read()
-#    elif mode.startswith("problog"):
-#        files = sys.argv[2:]
-#        program_str = ""
-#        if not files:
-#            program_str = sys.stdin.read()
-#        for path in files:
-#            with open(path) as file_:
-#                program_str += file_.read()
-#        parser = ProblogParser()
-#        program = parser.parse(program_str, semantics = ProblogSemantics())
-#
-#        queries = [ r for r in program if r.is_query() ]
-#        program = [ r for r in program if not r.is_query() ]
-#
-#        for r in program:
-#            if r.probability is not None:
-#                weights[str(r.head)] = float(r.probability)
-#
-#        program_str = "".join([ r.asp_string() for r in program])
-#        program_files = []
-#    grounder.ground(control, program_str = program_str, program_files = program_files)
-#    program = Program(control)
-#    program.no_sub = no_sub
-#
-#    logger.info("   Stats Original")
-#    logger.info("------------------------------------------------------------")
-#    program._generatePrimalGraph()
-#    program._decomposeGraph()
-#    logger.info("------------------------------------------------------------")
-#
-#    if no_pp:
-#        with open('out.lp', mode='wb') as file_out:
-#            program.write_prog(file_out)
-#            exit(0)
-#
-#    program.preprocess()
-#    logger.info("   Preprocessing Done")
-#    logger.info("------------------------------------------------------------")
-#
-#    with open('out.lp', mode='wb') as file_out:
-#        program.write_prog(file_out)
-#    #program.clark_completion()
-#    logger.info("   Stats translation")
-#    logger.info("------------------------------------------------------------")
-#    program.td_guided_clark_completion()
-#    logger.info("------------------------------------------------------------")
-#
-#    with open('out.cnf', mode='wb') as file_out:
-#        program.write_dimacs(file_out)
-#
-#    #logger.info("   Stats CNF")
-#    #logger.info("------------------------------------------------------------")
-#    #program.encoding_stats()
-#    if mode != "problogwmc":
-#        exit(0)
-#    logger.info("------------------------------------------------------------")
-#    p = subprocess.Popen([os.path.join(src_path, "c2d/bin/c2d_linux"), "-smooth_all", "-reduce", "-in", "out.cnf"], stdout=subprocess.PIPE)
-#    p.wait()
-#    import circuit
-#    if mode == "asp":
-#        weight_list = [ np.array([1.0]) for _ in range(program._max*2) ]
-#    elif mode.startswith("problog"):
-#        query_cnt = len(queries)
-#        varMap = { name : var for  var, name in program._nameMap.items() }
-#        weight_list = [ np.full(query_cnt, 1.0) for _ in range(program._max*2) ]
-#        for name in weights:
-#            weight_list[(varMap[name]-1)*2] = np.full(query_cnt, weights[name])
-#            weight_list[(varMap[name]-1)*2 + 1] = np.full(query_cnt, 1.0 - weights[name])
-#        for i, query in enumerate(queries):
-#            atom = str(query.atom)
-#            weight_list[(varMap[atom]-1)*2 + 1][i] = 0.0
-#    logger.info("   Results")
-#    logger.info("------------------------------------------------------------")
-#    results = circuit.Circuit.parse_wmc("out.cnf.nnf", weight_list)
-#    if mode == "asp":
-#        logger.info(f"The program has {int(results[0])} models")
-#    elif mode.startswith("problog"):
-#        for i, query in enumerate(queries):
-#            atom = str(query.atom)
-#            logger.info(f"{atom}: {' '*max(1,(20 - len(atom)))}{results[i]}")
+    n_cycles = len(cycles)
+    print(f'dpcs {n_cycles}')
+    if n_cycles:  # ~ tightness check
+        for x in control.symbolic_atoms:
+            print(f'c {x.symbol} {x.literal}')
+        for c in cycles:
+            for a in c:
+                print(a, end=' ')
+            print('\n', end='')
+    # for n in nx.nodes_with_selfloops(dp):
+    #     print(n)
+    # for x in control.symbolic_atoms:
+    #     print(f'c {x.symbol} {x.literal}')
