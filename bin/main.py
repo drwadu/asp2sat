@@ -1,10 +1,24 @@
 #!/home/hecher/miniconda3/bin/python3
-##/usr/bin/env python3
+# /usr/bin/env python3
 
 """
 Main module providing the application logic.
 """
 
+from semantics import ProblogSemantics
+from parser import ProblogParser
+import grounder
+import stats
+import backdoor
+import wfParse
+import tempfile
+from dpdb.writer import StreamWriter
+from dpdb.problems.sat_util import *
+from dpdb import treedecomp
+from dpdb import reader
+from clingoext import ClingoRule
+import clingoext
+from htd_validate.utils import hypergraph, graph
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
@@ -17,9 +31,10 @@ import math
 import queue
 import time
 # set library path
-#start = time.time()
+# start = time.time()
 # TODO: fixme
-src_path = os.path.abspath(os.path.realpath(inspect.getfile(inspect.currentframe())))
+src_path = os.path.abspath(os.path.realpath(
+    inspect.getfile(inspect.currentframe())))
 sys.path.insert(0, os.path.realpath(os.path.join(src_path, '../..')))
 
 src_path = os.path.realpath(os.path.join(src_path, '../../lib'))
@@ -32,24 +47,8 @@ if src_path not in sys.path:
 
 
 logger = logging.getLogger("asp2sat")
-logging.basicConfig(format='[%(levelname)s] %(name)s: %(message)s', level="INFO")
-
-from htd_validate.utils import hypergraph, graph
-
-import clingoext
-from clingoext import ClingoRule
-from dpdb import reader
-from dpdb import treedecomp
-from dpdb.problems.sat_util import *
-from dpdb.writer import StreamWriter
-import tempfile
-
-import wfParse
-import backdoor
-import stats
-import grounder
-from parser import ProblogParser
-from semantics import ProblogSemantics
+logging.basicConfig(
+    format='[%(levelname)s] %(name)s: %(message)s', level="INFO")
 
 
 class Rule(object):
@@ -58,7 +57,8 @@ class Rule(object):
         self.body = body
 
     def __repr__(self):
-        return "; ".join([str(a) for a in self.head]) + ":- " + ", ".join([ ("not " if b < 0 else "") + str(abs(b)) for b in self.body]) 
+        return "; ".join([str(a) for a in self.head]) + ":- " + ", ".join([("not " if b < 0 else "") + str(abs(b)) for b in self.body])
+
 
 class Program(object):
     def __init__(self, clingo_control):
@@ -72,7 +72,7 @@ class Program(object):
         self._deriv = set()
         self._copies = {}
         self._normalize(clingo_control)
-        #for r in self._program:
+        # for r in self._program:
         #    print("; ".join([self._nameMap[a] for a in r.head]) + ":- " + ", ".join([ ("not " if b < 0 else "") + self._nameMap[abs(b)] for b in r.body]))
 
     def remove_tautologies(self, clingo_control):
@@ -85,8 +85,8 @@ class Program(object):
     def _normalize(self, clingo_control):
         program = self.remove_tautologies(clingo_control)
         self._program = []
-        _atomToVertex = {} # htd wants succinct numbering of vertices / no holes
-        _vertexToAtom = {} # inverse mapping of _atomToVertex 
+        _atomToVertex = {}  # htd wants succinct numbering of vertices / no holes
+        _vertexToAtom = {}  # inverse mapping of _atomToVertex
         unary = []
 
         symbol_map = {}
@@ -98,31 +98,35 @@ class Program(object):
                 o.atoms.update(tuple(map(abs, o.body)))
                 if len(o.body) > 0:
                     self._program.append(o)
-                    for a in o.atoms.difference(_atomToVertex):	# add mapping for atom not yet mapped
+                    # add mapping for atom not yet mapped
+                    for a in o.atoms.difference(_atomToVertex):
                         if a in symbol_map:
                             _atomToVertex[a] = self.new_var(symbol_map[a])
                         else:
-                            _atomToVertex[a] = self.new_var(f"projected_away({a})")
+                            _atomToVertex[a] = self.new_var(
+                                f"projected_away({a})")
                         _vertexToAtom[self._max] = a
                 else:
                     if o.choice:
                         unary.append(o)
         for o in unary:
             self._program.append(o)
-            for a in o.atoms.difference(_atomToVertex):	# add mapping for atom not yet mapped
+            # add mapping for atom not yet mapped
+            for a in o.atoms.difference(_atomToVertex):
                 _atomToVertex[a] = self.new_var(symbol_map[a])
                 _vertexToAtom[self._max] = a
 
         trans_prog = set()
         for r in self._program:
-            if r.choice: 
+            if r.choice:
                 self._guess.add(_atomToVertex[r.head[0]])
             else:
                 head = list(map(lambda x: _atomToVertex[x], r.head))
-                body = list(map(lambda x: _atomToVertex[abs(x)]*(1 if x > 0 else -1), r.body))
-                trans_prog.add(Rule(head,body))
+                body = list(
+                    map(lambda x: _atomToVertex[abs(x)]*(1 if x > 0 else -1), r.body))
+                trans_prog.add(Rule(head, body))
         self._program = trans_prog
-        self._deriv = set(range(1,self._max + 1)).difference(self._guess)
+        self._deriv = set(range(1, self._max + 1)).difference(self._guess)
 
     def primalGraph(self):
         return self._graph
@@ -157,13 +161,18 @@ class Program(object):
     def _computeComponents(self):
         self.dep = nx.DiGraph()
         for r in self._program:
+            # print(self.dep)
+            # print(r)
             for a in r.head:
+                # print(a)
                 for b in r.body:
+                    # print(a)
                     if b > 0:
                         self.dep.add_edge(b, a)
         comp = nx.algorithms.strongly_connected_components(self.dep)
         self._components = list(comp)
-        self._condensation = nx.algorithms.condensation(self.dep, self._components)
+        self._condensation = nx.algorithms.condensation(
+            self.dep, self._components)
 
     def treeprocess(self):
         ins = {}
@@ -183,9 +192,12 @@ class Program(object):
         for t in ts:
             comp = self._condensation.nodes[t]["members"]
             for v in comp:
-                ancs[v] = set([vp[0] for vp in self.dep.in_edges(nbunch=v) if vp[0] in comp])
-                decs[v] = set([vp[1] for vp in self.dep.out_edges(nbunch=v) if vp[1] in comp])
-        q = set([v for v in ancs.keys() if len(ancs[v]) == 1 and len(decs[v]) == 1 and list(ancs[v])[0] == list(decs[v])[0]])
+                ancs[v] = set(
+                    [vp[0] for vp in self.dep.in_edges(nbunch=v) if vp[0] in comp])
+                decs[v] = set(
+                    [vp[1] for vp in self.dep.out_edges(nbunch=v) if vp[1] in comp])
+        q = set([v for v in ancs.keys() if len(ancs[v]) == 1 and len(
+            decs[v]) == 1 and list(ancs[v])[0] == list(decs[v])[0]])
         while not len(q) == 0:
             old_v = q.pop()
             if len(ancs[old_v]) == 0:
@@ -208,7 +220,7 @@ class Program(object):
             # any rule that does not use anc to derive v can now only derive new_v
             for r in to_rem:
                 head = [b if b != old_v else new_v for b in r.head]
-                new_r = Rule(head,r.body)
+                new_r = Rule(head, r.body)
                 ins[new_v].add(new_r)
                 for b in r.body:
                     if b > 0:
@@ -222,8 +234,8 @@ class Program(object):
             outs[old_v] = outs[old_v].difference(ins[anc])
             # any rule that uses v to derive anc must use new_v
             for r in to_rem:
-                body = [ (b if b != old_v else new_v) for b in r.body]
-                new_r = Rule(r.head,body)
+                body = [(b if b != old_v else new_v) for b in r.body]
+                new_r = Rule(r.head, body)
                 for b in r.head:
                     ins[b].remove(r)
                     ins[b].add(new_r)
@@ -243,12 +255,12 @@ class Program(object):
         for a in ins.keys():
             self._program.extend(ins[a])
 
-
     def write_scc(self, comp):
         res = ""
         for v in comp:
             res += f"p({v}).\n"
-            ancs = set([vp[0] for vp in self.dep.in_edges(nbunch=v) if vp[0] in comp])
+            ancs = set([vp[0]
+                       for vp in self.dep.in_edges(nbunch=v) if vp[0] in comp])
             for vp in ancs:
                 res += f"edge({vp},{v}).\n"
         return res
@@ -261,31 +273,43 @@ class Program(object):
                 basis = nx.cycle_basis(local_dep.to_undirected())
                 res = []
                 while len(basis) > 0:
-                    prog = f"b({len(comp)//2}).\n" + "\n".join([f"p({v})." for v in comp if v not in res]) + "\n"
+                    prog = f"b({len(comp)//2}).\n" + \
+                        "\n".join(
+                            [f"p({v})." for v in comp if v not in res]) + "\n"
                     for c in basis:
-                        prog += ":-" + ", ".join([f"not abs({v})" for v in c]) + ".\n"
+                        prog += ":-" + \
+                            ", ".join([f"not abs({v})" for v in c]) + ".\n"
                     c = backdoor.ClingoControl(prog)
-                    res += c.get_backdoor(os.path.dirname(os.path.abspath(__file__)) + "/guess_backdoor.lp")[2][0]
-                    local_dep = self.dep.subgraph([x for x in comp if x not in res])
+                    res += c.get_backdoor(os.path.dirname(
+                        os.path.abspath(__file__)) + "/guess_backdoor.lp")[2][0]
+                    local_dep = self.dep.subgraph(
+                        [x for x in comp if x not in res])
                     basis = nx.cycle_basis(local_dep.to_undirected())
             else:
                 try:
-                    c = backdoor.ClingoControl(f"b({len(comp)//2}).\n" + self.write_scc(comp))
-                    res = c.get_backdoor(os.path.dirname(os.path.abspath(__file__)) + "/guess_tree.lp")[2][0]
+                    c = backdoor.ClingoControl(
+                        f"b({len(comp)//2}).\n" + self.write_scc(comp))
+                    res = c.get_backdoor(os.path.dirname(
+                        os.path.abspath(__file__)) + "/guess_tree.lp")[2][0]
                 except:
                     basis = nx.cycle_basis(local_dep.to_undirected())
                     res = []
                     while len(basis) > 0:
-                        prog = "\n".join([f"p({v})." for v in comp if v not in res]) + "\n"
+                        prog = "\n".join(
+                            [f"p({v})." for v in comp if v not in res]) + "\n"
                         for c in basis:
-                            prog += ":-" + ", ".join([f"not abs({v})" for v in c]) + ".\n"
+                            prog += ":-" + \
+                                ", ".join([f"not abs({v})" for v in c]) + ".\n"
                         c = backdoor.ClingoControl(prog)
-                        res += c.get_backdoor(os.path.dirname(os.path.abspath(__file__)) + "/guess_backdoor.lp")[2][0]
-                        local_dep = self.dep.subgraph([x for x in comp if x not in res])
+                        res += c.get_backdoor(os.path.dirname(
+                            os.path.abspath(__file__)) + "/guess_backdoor.lp")[2][0]
+                        local_dep = self.dep.subgraph(
+                            [x for x in comp if x not in res])
                         basis = nx.cycle_basis(local_dep.to_undirected())
         except:
             res = comp
-            logger.error("backdoor guessing failed, returning whole component.")
+            logger.error(
+                "backdoor guessing failed, returning whole component.")
         print("backdoor comp: " + str(len(comp)))
         print("backdoor res: " + str(len(res)))
         return res
@@ -329,7 +353,7 @@ class Program(object):
 
         toAdd = set()
         for a in backdoor:
-            for i in range(1,len(backdoor)+1):
+            for i in range(1, len(backdoor)+1):
                 head = [getAtom(a, i)]
                 for r in ins[a]:
                     if i == 1:
@@ -356,7 +380,7 @@ class Program(object):
                 head = [getAtom(a, i)]
                 for r in ins[a]:
                     if i == 0:
-                        # in the first iteration we only add rules that only use atoms from outside 
+                        # in the first iteration we only add rules that only use atoms from outside
                         add = True
                         for x in r.body:
                             if x > 0 and x in backdoor:
@@ -365,7 +389,7 @@ class Program(object):
                         # in all other iterations we only use rules that use at least one atom from the SCC we are in
                         add = False
                         for x in r.body:
-                            if x >  0 and x in comp:
+                            if x > 0 and x in comp:
                                 add = True
                     if add:
                         body = [getAtom(x, i) for x in r.body]
@@ -374,11 +398,10 @@ class Program(object):
                 if i > 0:
                     toAdd.add(Rule(head, [getAtom(a, i - 1)]))
 
-        #print(toAdd)
+        # print(toAdd)
         self._program = [r for r in self._program if r not in toRemove]
         self._program += list(toAdd)
-        
-        
+
     def preprocess(self):
         self._computeComponents()
         self.treeprocess()
@@ -428,17 +451,22 @@ class Program(object):
         for r in self._program:
             atoms = set(r.head)
             atoms.update(tuple(map(abs, r.body)))
-            self._graph.add_hyperedge(tuple(atoms), checkSubsumes = not self.no_sub)
+            self._graph.add_hyperedge(
+                tuple(atoms), checkSubsumes=not self.no_sub)
 
     def _decomposeGraph(self):
         # Run htd
-        p = subprocess.Popen([os.path.join(src_path, "htd/bin/htd_main"), "--seed", "12342134", "--input", "hgr", "--child-limit", "2"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        self._graph.write_graph(p.stdin, dimacs=False, non_dimacs="tw", print_id = False)
+        p = subprocess.Popen([os.path.join(src_path, "htd/bin/htd_main"), "--seed", "12342134",
+                             "--input", "hgr", "--child-limit", "2"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self._graph.write_graph(p.stdin, dimacs=False,
+                                non_dimacs="tw", print_id=False)
         p.stdin.close()
         tdr = reader.TdReader.from_stream(p.stdout)
         p.wait()
-        self._td = treedecomp.TreeDecomp(tdr.num_bags, tdr.tree_width, tdr.num_orig_vertices, tdr.root, tdr.bags, tdr.adjacency_list, None)
-        logger.info(f"Tree decomposition #bags: {self._td.num_bags} tree_width: {self._td.tree_width} #vertices: {self._td.num_orig_vertices} #leafs: {len(self._td.leafs)} #edges: {len(self._td.edges)}")
+        self._td = treedecomp.TreeDecomp(
+            tdr.num_bags, tdr.tree_width, tdr.num_orig_vertices, tdr.root, tdr.bags, tdr.adjacency_list, None)
+        logger.info(
+            f"Tree decomposition #bags: {self._td.num_bags} tree_width: {self._td.tree_width} #vertices: {self._td.num_orig_vertices} #leafs: {len(self._td.leafs)} #edges: {len(self._td.edges)}")
 
     def td_guided_clark_completion(self):
         self._generatePrimalGraph()
@@ -488,7 +516,7 @@ class Program(object):
                             final = unfinished[tp].pop(a)
                             self._clauses.append([-a, final])
                             self._clauses.append([a, -final])
-                        else: 
+                        else:
                             self._clauses.append([-a])
                 rest = tp.vertices.intersection(t.vertices)
                 for a in rest:
@@ -516,21 +544,22 @@ class Program(object):
                     final = unfinished[self._td.root].pop(a)
                     self._clauses.append([-a, final])
                     self._clauses.append([a, -final])
-                else: 
+                else:
                     self._clauses.append([-a])
 
         constraints = [r for r in self._program if len(r.head) == 0]
         for r in constraints:
             self._clauses.append([-x for x in r.body])
 
-    def write_dimacs(self, stream, debug = False):
+    def write_dimacs(self, stream, debug=False):
         stream.write(f"p cnf {self._max} {len(self._clauses)}\n".encode())
         if debug:
             for c in self._clauses:
-                stream.write((" ".join([("not " if v < 0 else "") + self._nameMap[abs(v)] for v in c]) + " 0\n" ).encode())
+                stream.write((" ".join(
+                    [("not " if v < 0 else "") + self._nameMap[abs(v)] for v in c]) + " 0\n").encode())
         else:
             for c in self._clauses:
-                stream.write((" ".join([str(v) for v in c]) + " 0\n" ).encode())
+                stream.write((" ".join([str(v) for v in c]) + " 0\n").encode())
 
     def prog_string(self, program, problog=False):
         result = ""
@@ -542,7 +571,8 @@ class Program(object):
         for r in program:
             result += ";".join([self._nameMap[v] for v in r.head])
             result += ":-"
-            result += ",".join([("not " if v < 0 else "") + self._nameMap[abs(v)] for v in r.body])
+            result += ",".join([("not " if v < 0 else "") +
+                               self._nameMap[abs(v)] for v in r.body])
             result += ".\n"
         if problog:
             result += "query(smokes(X))."
@@ -552,113 +582,140 @@ class Program(object):
         stream.write(self.prog_string(self._program, False).encode())
 
     def encoding_stats(self):
-        num_vars, edges= cnf2primal(self._max, self._clauses)
-        p = subprocess.Popen([os.path.join(src_path, "htd/bin/htd_main"), "--seed", "12342134", "--input", "hgr"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        num_vars, edges = cnf2primal(self._max, self._clauses)
+        p = subprocess.Popen([os.path.join(src_path, "htd/bin/htd_main"), "--seed",
+                             "12342134", "--input", "hgr"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         logger.debug("Running htd")
         StreamWriter(p.stdin).write_gr(num_vars, edges)
         p.stdin.close()
         tdr = reader.TdReader.from_stream(p.stdout)
         p.wait()
         logger.debug("Parsing tree decomposition")
-        td = treedecomp.TreeDecomp(tdr.num_bags, tdr.tree_width, tdr.num_orig_vertices, tdr.root, tdr.bags, tdr.adjacency_list, None)
-        logger.info(f"Tree decomposition #bags: {td.num_bags} tree_width: {td.tree_width} #vertices: {td.num_orig_vertices} #leafs: {len(td.leafs)} #edges: {len(td.edges)}")
-            
+        td = treedecomp.TreeDecomp(
+            tdr.num_bags, tdr.tree_width, tdr.num_orig_vertices, tdr.root, tdr.bags, tdr.adjacency_list, None)
+        logger.info(
+            f"Tree decomposition #bags: {td.num_bags} tree_width: {td.tree_width} #vertices: {td.num_orig_vertices} #leafs: {len(td.leafs)} #edges: {len(td.edges)}")
+
+
 if __name__ == "__main__":
     control = clingoext.Control()
-    mode = sys.argv[1]
-    weights = {}
-    no_sub = False
-    no_pp = False
-    if len(sys.argv) > 2 and sys.argv[2] == "-no_subset_check":
-        logger.info("   Not performing subset check when adding edges to hypergraph.")
-        no_sub = True
-        del sys.argv[2]
-    elif len(sys.argv) > 2 and sys.argv[2] == "-no_pp":
-        logger.info("   No Preprocessin")
-        no_pp = True
-        del sys.argv[2]
-    if mode == "asp":
-        program_files = sys.argv[2:]
-        program_str = None
-        if not program_files:
-            program_str = sys.stdin.read()
-    elif mode.startswith("problog"):
-        files = sys.argv[2:]
-        program_str = ""
-        if not files:
-            program_str = sys.stdin.read()
-        for path in files:
-            with open(path) as file_:
-                program_str += file_.read()
-        parser = ProblogParser()
-        program = parser.parse(program_str, semantics = ProblogSemantics())
 
-        queries = [ r for r in program if r.is_query() ]
-        program = [ r for r in program if not r.is_query() ]
+    program_files = sys.argv[1:]
+    program_str = None
+    if not program_files:
+        program_str = sys.stdin.read()
 
-        for r in program:
-            if r.probability is not None:
-                weights[str(r.head)] = float(r.probability)
-
-        program_str = "".join([ r.asp_string() for r in program])
-        program_files = []
-    grounder.ground(control, program_str = program_str, program_files = program_files)
+    grounder.ground(control, program_str=program_str,
+                    program_files=program_files)
     program = Program(control)
-    program.no_sub = no_sub
+    program._computeComponents()
+    dp = program.dep
 
-    logger.info("   Stats Original")
-    logger.info("------------------------------------------------------------")
-    program._generatePrimalGraph()
-    program._decomposeGraph()
-    logger.info("------------------------------------------------------------")
+    cycles = list(nx.simple_cycles(program.dep))
+    print(f'dpcs {len(cycles)}')
+    for x in control.symbolic_atoms:
+        print(f'c {x.symbol} {x.literal}')
+    for c in cycles:
+        for a in c:
+            print(a, end=' ')
+        print()
 
-    if no_pp:
-        with open('out.lp', mode='wb') as file_out:
-            program.write_prog(file_out)
-            exit(0)
-
-    program.preprocess()
-    logger.info("   Preprocessing Done")
-    logger.info("------------------------------------------------------------")
-    
-    with open('out.lp', mode='wb') as file_out:
-        program.write_prog(file_out)
-    #program.clark_completion()
-    logger.info("   Stats translation")
-    logger.info("------------------------------------------------------------")
-    program.td_guided_clark_completion()
-    logger.info("------------------------------------------------------------")
-
-    with open('out.cnf', mode='wb') as file_out:
-        program.write_dimacs(file_out)
-
-    #logger.info("   Stats CNF")
-    #logger.info("------------------------------------------------------------")
-    #program.encoding_stats()
-    if mode != "problogwmc":
-        exit(0)
-    logger.info("------------------------------------------------------------")
-    p = subprocess.Popen([os.path.join(src_path, "c2d/bin/c2d_linux"), "-smooth_all", "-reduce", "-in", "out.cnf"], stdout=subprocess.PIPE)
-    p.wait()
-    import circuit
-    if mode == "asp":
-        weight_list = [ np.array([1.0]) for _ in range(program._max*2) ]
-    elif mode.startswith("problog"):
-        query_cnt = len(queries)
-        varMap = { name : var for  var, name in program._nameMap.items() }
-        weight_list = [ np.full(query_cnt, 1.0) for _ in range(program._max*2) ]
-        for name in weights:
-            weight_list[(varMap[name]-1)*2] = np.full(query_cnt, weights[name])
-            weight_list[(varMap[name]-1)*2 + 1] = np.full(query_cnt, 1.0 - weights[name])
-        for i, query in enumerate(queries):
-            atom = str(query.atom)
-            weight_list[(varMap[atom]-1)*2 + 1][i] = 0.0
-    logger.info("   Results")
-    logger.info("------------------------------------------------------------")
-    results = circuit.Circuit.parse_wmc("out.cnf.nnf", weight_list)
-    if mode == "asp":
-        logger.info(f"The program has {int(results[0])} models")
-    elif mode.startswith("problog"):
-        for i, query in enumerate(queries):
-            atom = str(query.atom)
-            logger.info(f"{atom}: {' '*max(1,(20 - len(atom)))}{results[i]}")
+# if __name__ == "__main__":
+#    control = clingoext.Control()
+#    mode = sys.argv[1]
+#    weights = {}
+#    no_sub = False
+#    no_pp = False
+#    if len(sys.argv) > 2 and sys.argv[2] == "-no_subset_check":
+#        logger.info("   Not performing subset check when adding edges to hypergraph.")
+#        no_sub = True
+#        del sys.argv[2]
+#    elif len(sys.argv) > 2 and sys.argv[2] == "-no_pp":
+#        logger.info("   No Preprocessin")
+#        no_pp = True
+#        del sys.argv[2]
+#    if mode == "asp":
+#        program_files = sys.argv[2:]
+#        program_str = None
+#        if not program_files:
+#            program_str = sys.stdin.read()
+#    elif mode.startswith("problog"):
+#        files = sys.argv[2:]
+#        program_str = ""
+#        if not files:
+#            program_str = sys.stdin.read()
+#        for path in files:
+#            with open(path) as file_:
+#                program_str += file_.read()
+#        parser = ProblogParser()
+#        program = parser.parse(program_str, semantics = ProblogSemantics())
+#
+#        queries = [ r for r in program if r.is_query() ]
+#        program = [ r for r in program if not r.is_query() ]
+#
+#        for r in program:
+#            if r.probability is not None:
+#                weights[str(r.head)] = float(r.probability)
+#
+#        program_str = "".join([ r.asp_string() for r in program])
+#        program_files = []
+#    grounder.ground(control, program_str = program_str, program_files = program_files)
+#    program = Program(control)
+#    program.no_sub = no_sub
+#
+#    logger.info("   Stats Original")
+#    logger.info("------------------------------------------------------------")
+#    program._generatePrimalGraph()
+#    program._decomposeGraph()
+#    logger.info("------------------------------------------------------------")
+#
+#    if no_pp:
+#        with open('out.lp', mode='wb') as file_out:
+#            program.write_prog(file_out)
+#            exit(0)
+#
+#    program.preprocess()
+#    logger.info("   Preprocessing Done")
+#    logger.info("------------------------------------------------------------")
+#
+#    with open('out.lp', mode='wb') as file_out:
+#        program.write_prog(file_out)
+#    #program.clark_completion()
+#    logger.info("   Stats translation")
+#    logger.info("------------------------------------------------------------")
+#    program.td_guided_clark_completion()
+#    logger.info("------------------------------------------------------------")
+#
+#    with open('out.cnf', mode='wb') as file_out:
+#        program.write_dimacs(file_out)
+#
+#    #logger.info("   Stats CNF")
+#    #logger.info("------------------------------------------------------------")
+#    #program.encoding_stats()
+#    if mode != "problogwmc":
+#        exit(0)
+#    logger.info("------------------------------------------------------------")
+#    p = subprocess.Popen([os.path.join(src_path, "c2d/bin/c2d_linux"), "-smooth_all", "-reduce", "-in", "out.cnf"], stdout=subprocess.PIPE)
+#    p.wait()
+#    import circuit
+#    if mode == "asp":
+#        weight_list = [ np.array([1.0]) for _ in range(program._max*2) ]
+#    elif mode.startswith("problog"):
+#        query_cnt = len(queries)
+#        varMap = { name : var for  var, name in program._nameMap.items() }
+#        weight_list = [ np.full(query_cnt, 1.0) for _ in range(program._max*2) ]
+#        for name in weights:
+#            weight_list[(varMap[name]-1)*2] = np.full(query_cnt, weights[name])
+#            weight_list[(varMap[name]-1)*2 + 1] = np.full(query_cnt, 1.0 - weights[name])
+#        for i, query in enumerate(queries):
+#            atom = str(query.atom)
+#            weight_list[(varMap[atom]-1)*2 + 1][i] = 0.0
+#    logger.info("   Results")
+#    logger.info("------------------------------------------------------------")
+#    results = circuit.Circuit.parse_wmc("out.cnf.nnf", weight_list)
+#    if mode == "asp":
+#        logger.info(f"The program has {int(results[0])} models")
+#    elif mode.startswith("problog"):
+#        for i, query in enumerate(queries):
+#            atom = str(query.atom)
+#            logger.info(f"{atom}: {' '*max(1,(20 - len(atom)))}{results[i]}")
