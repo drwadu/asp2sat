@@ -8,3 +8,8 @@ dbg.cnf
 dbg.gr
 *__pycache__*
 *.swp
+
+/utils
+/scripts
+/instances_fcycles
+/instances

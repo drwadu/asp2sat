@@ -160,6 +160,7 @@ class Program(object):
 
     def _computeComponents(self):
         self.dep = nx.DiGraph()
+        # print(self._program)
         for r in self._program:
             for a in r.head:
                 for b in r.body:
@@ -170,16 +171,16 @@ class Program(object):
         self._condensation = nx.algorithms.condensation(
             self.dep, self._components)
 
-    def _computeComponents_hack(self):
-        self.dep = nx.DiGraph()
-        for r in self._program:
-            for a in r.head:
-                for b in r.body:  # all body atoms of form: not not atom
-                    self.dep.add_edge(b, a)
-        comp = nx.algorithms.strongly_connected_components(self.dep)
-        self._components = list(comp)
-        self._condensation = nx.algorithms.condensation(
-            self.dep, self._components)
+   # def _computeComponents_hack(self):
+   #     self.dep = nx.DiGraph()
+   #     for r in self._program:
+   #         for a in r.head:
+   #             for b in r.body:  # all body atoms of form: not not atom
+   #                 self.dep.add_edge(b, a)
+   #     comp = nx.algorithms.strongly_connected_components(self.dep)
+   #     self._components = list(comp)
+   #     self._condensation = nx.algorithms.condensation(
+   #         self.dep, self._components)
 
     def treeprocess(self):
         ins = {}
@@ -605,31 +606,90 @@ class Program(object):
 
 
 if __name__ == "__main__":
+    # import clingo
+    # control = clingo.Control()
+    # lp = sys.argv[1]
+    # with open(lp) as file_:
+    #    f = file_.read()
+    #    control.add("base", [], f)
+    #    control.ground([('base', [])])
+    #    print(f)
+    #    for x in control.symbolic_atoms:
+    #        print(f'{x.symbol} {x.literal}')
+
     control = clingoext.Control()
 
-    program_files = sys.argv[1:]
-    program_str = None
-    if not program_files:
-        program_str = sys.stdin.read()
+    # program_files = sys.argv[1:]
+    # program_str = None
+    # if not program_files:
+    #     program_str = sys.stdin.read()
 
-    grounder.ground(control, program_str=program_str,
-                    program_files=program_files)
+    with open(sys.argv[1], 'r') as f:
+        control.add("base", [], f.read())
+        control.ground([('base', [])])
+    inclusive_facets = None
+    with open(sys.argv[2], 'r') as g:
+        inclusive_facets = g.readlines()[0].split(' ')
+        # inclusive_facets = filter(
+        #     lambda l: not l.starts_with('~'), inclusive_facets)
+        for f in inclusive_facets:
+            if f[0] == '~':
+                inclusive_facets.remove(f)
+    inclusive_facets = [
+        int(x.literal) for f in inclusive_facets for x in control.symbolic_atoms if str(x.symbol) == f]
+
     program = Program(control)
     program._computeComponents()
     dp = program.dep
-    # print(dp)
 
-    cycles = list(nx.simple_cycles(program.dep))
-    n_cycles = len(cycles)
-    print(f'dpcs {n_cycles}')
-    if n_cycles:  # ~ tightness check
+    cycles = set(map(frozenset, nx.simple_cycles(program.dep)))
+    components = set(map(frozenset, dp.edges()))
+    cycle_free_components = components.difference(cycles)
+
+    n = 0
+    if cycles:
         for x in control.symbolic_atoms:
             print(f'c {x.symbol} {x.literal}')
-        for c in cycles:
-            for a in c:
-                print(a, end=' ')
-            print('\n', end='')
-    # for n in nx.nodes_with_selfloops(dp):
-    #     print(n)
+
+        for f in inclusive_facets:
+            for c in cycles:
+                if f in map(int, c):
+                    n += 1
+                    print(f'{f}', end='')
+                    # find one external support of corresponding cycle
+                    es = '0'
+                    for e in cycle_free_components:
+                        i = set(e).intersection(c)
+                        if i:
+                            es = next(e.difference(c).__iter__())
+                            break
+                    # find one external support
+                    #c = set(c)
+                    #es = '0'
+                    # for e in cycle_free_components:
+                    #    i = set(e).intersection([f])
+                    #    if i:
+                    #        es = next(e.difference([f]).__iter__())
+                    #        break
+
+                    print(f' {es}', end='')
+                    print(' -', end='')
+
+                    for c_ in c:
+                        print(f' {c_}', end='')
+                    print()
+    else:
+        print(n)
+
+    # cycles = list(nx.simple_cycles(program.dep))
+    # n_cycles = len(cycles)
+    # print(f'dpcs {n_cycles}')
+    # if n_cycles:  # ~ tightness check
     # for x in control.symbolic_atoms:
-    #     print(f'c {x.symbol} {x.literal}')
+    # print(f'c {x.symbol} {x.literal}')
+    # for c in cycles:
+    # for a in c:
+    # print(a, end=' ')
+    # print('\n', end='')
+    # print(inclusive_facets)
+    # print(program._components)
