@@ -629,14 +629,14 @@ if __name__ == "__main__":
         control.ground([('base', [])])
     inclusive_facets = None
     with open(sys.argv[2], 'r') as g:
-        inclusive_facets = g.readlines()[0].split(' ')
-        # inclusive_facets = filter(
-        #     lambda l: not l.starts_with('~'), inclusive_facets)
-        for f in inclusive_facets:
-            if f[0] == '~':
-                inclusive_facets.remove(f)
-    inclusive_facets = [
-        int(x.literal) for f in inclusive_facets for x in control.symbolic_atoms if str(x.symbol) == f]
+        inclusive_facets = g.readlines()
+        if inclusive_facets:
+            inclusive_facets = inclusive_facets[0].split(' ')
+            for f in inclusive_facets:
+                if f[0] == '~':
+                    inclusive_facets.remove(f)
+            inclusive_facets = [
+                int(x.literal) for f in inclusive_facets for x in control.symbolic_atoms if str(x.symbol) == f]
 
     program = Program(control)
     program._computeComponents()
@@ -648,6 +648,7 @@ if __name__ == "__main__":
 
     n = 0
     if cycles:
+        print(len(cycles))
         for x in control.symbolic_atoms:
             print(f'c {x.symbol} {x.literal}')
 
@@ -657,23 +658,21 @@ if __name__ == "__main__":
                     n += 1
                     print(f'{f}', end='')
                     # find one external support of corresponding cycle
-                    es = '0'
+                    #es = '0'
+                    # for e in cycle_free_components:
+                    #    i = set(e).intersection(c)
+                    #    if i:
+                    #        es = next(e.difference(c).__iter__())
+                    #        break
+
+                    # find all external supports of corresponding cycle
                     for e in cycle_free_components:
                         i = set(e).intersection(c)
                         if i:
-                            es = next(e.difference(c).__iter__())
-                            break
-                    # find one external support
-                    #c = set(c)
-                    #es = '0'
-                    # for e in cycle_free_components:
-                    #    i = set(e).intersection([f])
-                    #    if i:
-                    #        es = next(e.difference([f]).__iter__())
-                    #        break
+                            for es in e.difference(c):
+                                print(f' {es}', end='')
 
-                    print(f' {es}', end='')
-                    print(' -', end='')
+                    print(' 0', end='')
 
                     for c_ in c:
                         print(f' {c_}', end='')
