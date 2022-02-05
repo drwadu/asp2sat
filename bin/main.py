@@ -627,68 +627,51 @@ if __name__ == "__main__":
     with open(sys.argv[1], 'r') as f:
         control.add("base", [], f.read())
         control.ground([('base', [])])
-    inclusive_facets = None
-    with open(sys.argv[2], 'r') as g:
-        inclusive_facets = g.readlines()
-        if inclusive_facets:
-            inclusive_facets = inclusive_facets[0].split(' ')
-            for f in inclusive_facets:
-                if f[0] == '~':
-                    inclusive_facets.remove(f)
-            inclusive_facets = [
-                int(x.literal) for f in inclusive_facets for x in control.symbolic_atoms if str(x.symbol) == f]
 
     program = Program(control)
     program._computeComponents()
     dp = program.dep
 
-    cycles = set(map(frozenset, nx.simple_cycles(program.dep)))
+    cycles = list(map(frozenset, nx.simple_cycles(program.dep)))
+    print(cycles)
+    marked_cycles = set()
+
+    # cycles are given as edges (thus of size 2)
+    # mark connected cycles
+    seen_together = set()
+    for i, c_i in enumerate(cycles):
+        for c_j in cycles:
+            if not (c_i, c_j) in seen_together and c_i.difference(c_j):
+                seen_together.add((c_i, c_j))
+                seen_together.add((c_j, c_i))
+                marked_cycles.add((i, c_i))
+                marked_cycles.add((i, c_j))
+
+    print(marked_cycles)
     components = set(map(frozenset, dp.edges()))
+
     cycle_free_components = components.difference(cycles)
 
-    n = 0
-    if cycles:
-        print(len(cycles))
+    if marked_cycles:
+        # write number of cycles
+        print(len(marked_cycles))
+
+        # write literal mappings
         for x in control.symbolic_atoms:
             print(f'c {x.symbol} {x.literal}')
 
-        for f in inclusive_facets:
-            for c in cycles:
-                if f in map(int, c):
-                    n += 1
-                    print(f'{f}', end='')
-                    # find one external support of corresponding cycle
-                    #es = '0'
-                    # for e in cycle_free_components:
-                    #    i = set(e).intersection(c)
-                    #    if i:
-                    #        es = next(e.difference(c).__iter__())
-                    #        break
+        # write cycles with corresponding external supports
+        # and add information about common bigger cycle
+        for id, cycle in marked_cycles:
+            print(f'{id}', end='')
 
-                    # find all external supports of corresponding cycle
-                    for e in cycle_free_components:
-                        i = set(e).intersection(c)
-                        if i:
-                            for es in e.difference(c):
-                                print(f' {es}', end='')
+            # find all external supports of corresponding cycle
+            for edge in cycle_free_components:
+                if set(edge).intersection(cycle):
+                    for external_support in set(edge).difference(cycle):
+                        print(f' -{external_support}', end='')
 
-                    print(' 0', end='')
+            for a in cycle:
+                print(f' {a}', end='')
 
-                    for c_ in c:
-                        print(f' {c_}', end='')
-                    print()
-    else:
-        print(n)
-
-    # cycles = list(nx.simple_cycles(program.dep))
-    # n_cycles = len(cycles)
-    # print(f'dpcs {n_cycles}')
-    # if n_cycles:  # ~ tightness check
-    # for x in control.symbolic_atoms:
-    # print(f'c {x.symbol} {x.literal}')
-    # for c in cycles:
-    # for a in c:
-    # print(a, end=' ')
-    # print('\n', end='')
-    # print(inclusive_facets)
-    # print(program._components)
+            print('')
