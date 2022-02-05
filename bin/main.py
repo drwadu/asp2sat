@@ -5,6 +5,7 @@
 Main module providing the application logic.
 """
 
+
 from semantics import ProblogSemantics
 from parser import ProblogParser
 import grounder
@@ -605,24 +606,17 @@ class Program(object):
             f"Tree decomposition #bags: {td.num_bags} tree_width: {td.tree_width} #vertices: {td.num_orig_vertices} #leafs: {len(td.leafs)} #edges: {len(td.edges)}")
 
 
+def external_supports(cycle, cycle_free_components):
+    external_supports = []
+    for edge in cycle_free_components:
+        if set(edge).intersection(cycle):
+            for external_support in set(edge).difference(cycle):
+                external_supports.append(-external_support)
+    return external_supports
+
+
 if __name__ == "__main__":
-    # import clingo
-    # control = clingo.Control()
-    # lp = sys.argv[1]
-    # with open(lp) as file_:
-    #    f = file_.read()
-    #    control.add("base", [], f)
-    #    control.ground([('base', [])])
-    #    print(f)
-    #    for x in control.symbolic_atoms:
-    #        print(f'{x.symbol} {x.literal}')
-
     control = clingoext.Control()
-
-    # program_files = sys.argv[1:]
-    # program_str = None
-    # if not program_files:
-    #     program_str = sys.stdin.read()
 
     with open(sys.argv[1], 'r') as f:
         control.add("base", [], f.read())
@@ -633,45 +627,82 @@ if __name__ == "__main__":
     dp = program.dep
 
     cycles = list(map(frozenset, nx.simple_cycles(program.dep)))
-    print(cycles)
     marked_cycles = set()
+    scc = program._components
 
-    # cycles are given as edges (thus of size 2)
-    # mark connected cycles
-    seen_together = set()
-    for i, c_i in enumerate(cycles):
-        for c_j in cycles:
-            if not (c_i, c_j) in seen_together and c_i.difference(c_j):
-                seen_together.add((c_i, c_j))
-                seen_together.add((c_j, c_i))
-                marked_cycles.add((i, c_i))
-                marked_cycles.add((i, c_j))
-
-    print(marked_cycles)
     components = set(map(frozenset, dp.edges()))
 
     cycle_free_components = components.difference(cycles)
 
-    if marked_cycles:
-        # write number of cycles
-        print(len(marked_cycles))
+    print(len(cycles))
+    if cycles:
+        ms, ps = [], []
+        seen_ps = set()
+        for cycle in cycles:
+            m = []
+            m = external_supports(cycle, cycle_free_components)
+            m += list(cycle)
+            ms.append(m)
+        for x in ms:
+            for y in ms:
+                if not x == y:
+                    z = x + y
+                    sz = frozenset(z)
+                    if not sz in seen_ps:
+                        ps.append(z)
+                    seen_ps.add(sz)
 
-        # write literal mappings
         for x in control.symbolic_atoms:
             print(f'c {x.symbol} {x.literal}')
 
-        # write cycles with corresponding external supports
-        # and add information about common bigger cycle
-        for id, cycle in marked_cycles:
-            print(f'{id}', end='')
+        for m___ in ms:
+            print('m', end='')
+            for i in m___:
+                print(f' {i}', end='')
+            print()
+        for p in ps:
+            print('p', end='')
+            for i in p:
+                print(f' {i}', end='')
+            print()
 
-            # find all external supports of corresponding cycle
-            for edge in cycle_free_components:
-                if set(edge).intersection(cycle):
-                    for external_support in set(edge).difference(cycle):
-                        print(f' -{external_support}', end='')
+    #ms, ps = [], []
+    # print(len(cycles))
+    # for x in control.symbolic_atoms:
+    #    print(f'c {x.symbol} {x.literal}')
+    # if cycles:
+    #    for cycle in cycles:
+    #        m = []
+    #        supports = external_supports(cycle, cycle_free_components)
+    #        for s in supports:
+    #            m.append(-s)
+    #        for c in cycle:
+    #            m.append(c)
+    #        sm = set(m)
+    #        if not sm in ms:
+    #            print('m', end='')
+    #            for i in m:
+    #                print(f' {i}', end='')
+    #            print()
+    #        ms.append(sm)
 
-            for a in cycle:
-                print(f' {a}', end='')
-
-            print('')
+    #        for cycle_ in cycles:
+    #            if cycle != cycle_ and cycle.intersection(cycle_):
+    #                p = []
+    #                supports_cycle_ = external_supports(
+    #                    cycle_, cycle_free_components)
+    #                for s in supports:
+    #                    p.append(-s)
+    #                for s in supports_cycle_:
+    #                    p.append(-s)
+    #                for c in cycle:
+    #                    p.append(c)
+    #                for c in cycle_:
+    #                    p.append(c)
+    #                sp = set(p)
+    #                if sp not in ps:
+    #                    print('p', end='')
+    #                    for i in p:
+    #                        print(f' {i}', end='')
+    #                    print()
+    #                ps.append(sp)
