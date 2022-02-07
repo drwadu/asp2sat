@@ -615,6 +615,15 @@ def external_supports(cycle, cycle_free_components):
     return external_supports
 
 
+def combs(a):
+    if len(a) == 0:
+        return [[]]
+    cs = []
+    for c in combs(a[1:]):
+        cs += [c, c+[a[0]]]
+    return cs
+
+
 if __name__ == "__main__":
     control = clingoext.Control()
 
@@ -643,30 +652,53 @@ if __name__ == "__main__":
             m = external_supports(cycle, cycle_free_components)
             m += list(cycle)
             ms.append(m)
-        for x in ms:
-            for y in ms:
-                if not x == y:
-                    z = x + y
-                    sz = frozenset(z)
-                    if not sz in seen_ps:
-                        ps.append(z)
-                    seen_ps.add(sz)
 
-        for x in control.symbolic_atoms:
-            print(f'c {x.symbol} {x.literal}')
+        # for m___ in ms:
+        #     print('m', end='')
+        #     for i in m___:
+        #         print(f' {i}', end='')
+        #     print()
+        if sys.argv[2] == '-r':
+            for x in ms:
+                for y in ms:
+                    if not x == y:
+                        z = x + y
+                        sz = frozenset(z)
+                        if not sz in seen_ps:
+                            ps.append(z)
+                        seen_ps.add(sz)
 
-        for m___ in ms:
-            print('m', end='')
-            for i in m___:
-                print(f' {i}', end='')
-            print()
-        for p in ps:
-            print('p', end='')
-            for i in p:
-                print(f' {i}', end='')
-            print()
+            for x in control.symbolic_atoms:
+                print(f'c {x.symbol} {x.literal}')
 
-    #ms, ps = [], []
+            for m___ in ms:
+                print('m', end='')
+                for i in m___:
+                    print(f' {i}', end='')
+                print()
+            for p in ps:
+                print('p', end='')
+                for i in p:
+                    print(f' {i}', end='')
+                print()
+        else:
+            for x in control.symbolic_atoms:
+                print(f'c {x.symbol} {x.literal}')
+            for l in sorted(combs(ms), key=len):
+                if len(l):
+                    if not len(l) % 2:
+                        print('p', end='')
+                        for d in l:
+                            for a in d:
+                                print(f' {a}', end='')
+                    else:
+                        print('m', end='')
+                        for d in l:
+                            for a in d:
+                                print(f' {a}', end='')
+                    print()
+
+    # ms, ps = [], []
     # print(len(cycles))
     # for x in control.symbolic_atoms:
     #    print(f'c {x.symbol} {x.literal}')
